@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Premium thin scrollbar for in-list scroll containers */
+.overflow-y-auto::-webkit-scrollbar { width: 6px; }
+.overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
+.overflow-y-auto::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.25); border-radius: 9999px; }
+.overflow-y-auto::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.45); }
+.overflow-y-auto { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent; }
+
+
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",

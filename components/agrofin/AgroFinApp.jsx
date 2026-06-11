@@ -406,8 +406,8 @@ const IncomePage = () => {
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Recent Income</CardTitle></CardHeader>
           <CardContent>
-            <div className="space-y-2 max-h-96 overflow-auto">
-              {state.incomes.map(i => (
+            <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-2">
+              {[...state.incomes].sort((a,b) => new Date(b.date) - new Date(a.date)).map(i => (
                 <div key={i.id} className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/40">
                   <div className="flex items-center gap-3">
                     <div className="rounded-full p-2 bg-emerald-500/10 text-emerald-500"><ArrowUpRight className="h-4 w-4"/></div>
@@ -529,8 +529,8 @@ const ExpensePage = () => {
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Recent Expenses</CardTitle></CardHeader>
           <CardContent>
-            <div className="space-y-2 max-h-96 overflow-auto">
-              {state.expenses.map(e => (
+            <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-2">
+              {[...state.expenses].sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => (
                 <div key={e.id} className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/40">
                   <div className="flex items-center gap-3">
                     <div className="rounded-full p-2 bg-rose-500/10 text-rose-500"><ArrowDownRight className="h-4 w-4"/></div>
@@ -695,8 +695,8 @@ const CropCard = ({ crop: c }) => {
           </div>
 
           {inputs.length > 0 ? (
-            <div className="space-y-1.5">
-              {inputs.map(inv => (
+            <div className="space-y-1.5 max-h-[16rem] overflow-y-auto pr-2">
+              {[...inputs].sort((a,b) => new Date(b.date) - new Date(a.date)).map(inv => (
                 <div key={inv.id} className="flex items-center justify-between rounded-lg border bg-card p-2.5 text-sm gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <Badge variant="outline" className="capitalize shrink-0">{inv.category}</Badge>
@@ -868,7 +868,7 @@ const LoanCard = ({ loan }) => {
             <TabsTrigger value="chart">Balance Curve</TabsTrigger>
           </TabsList>
           <TabsContent value="history" className="mt-3">
-            <div className="space-y-1 max-h-56 overflow-auto">
+            <div className="space-y-1 max-h-[12.5rem] overflow-y-auto pr-2">
               {[...(loan.txs||[])].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(t => (
                 <div key={t.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
                   <div className="flex items-center gap-2">
@@ -1028,8 +1028,8 @@ const PeersPage = () => {
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Peer Entries</CardTitle></CardHeader>
           <CardContent>
-            <div className="space-y-2 max-h-[28rem] overflow-auto">
-              {state.peers.map(p => (
+            <div className="space-y-2 max-h-[22rem] overflow-y-auto pr-2">
+              {[...state.peers].sort((a,b) => new Date(b.date) - new Date(a.date)).map(p => (
                 <div key={p.id} className={`flex items-center justify-between rounded-lg border p-3 ${p.settled?'opacity-50':''}`}>
                   <div className="flex items-center gap-3">
                     <div className={`rounded-full p-2 ${p.direction==='lent'?'bg-emerald-500/10 text-emerald-500':'bg-rose-500/10 text-rose-500'}`}>
