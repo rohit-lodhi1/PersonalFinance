@@ -6,6 +6,7 @@ import {
   HandCoins, Gem, Menu, X, Plus, Trash2, ArrowDownRight, ArrowUpRight,
   Sparkles, Calendar, Target, AlertCircle, CheckCircle2, Sprout,
   Shield, LogOut, Users, Eye, UserCog, Lock, Loader2, KeyRound, Pencil, Settings,
+  Tag, Calculator, Zap, Check, X as XIcon,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -13,13 +14,13 @@ import {
 } from 'recharts'
 
 import { StoreProvider, useStore, fmtINR, fmtINRFull } from '@/lib/agrofin/store'
-import { computeLoanState, projectInterestPerYear } from '@/lib/agrofin/loanMath'
+import { computeLoanState, projectInterestPerYear, payoffToday, minMonthlyInterest, simulatePayoff } from '@/lib/agrofin/loanMath'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
@@ -183,6 +184,250 @@ const PageHeader = ({ title, subtitle, actions }) => (
     {actions}
   </div>
 )
+
+// ---------- CATEGORY MANAGER ----------
+const CategoryManager = ({ title, list, onChange, usedBy = [] }) => {
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(null) // category name being edited
+  const [editVal, setEditVal] = useState('')
+  const [newCat, setNewCat] = useState('')
+
+  const safe = Array.isArray(list) ? list : []
+
+  const addCat = () => {
+    const v = newCat.trim()
+    if (!v) return toast.error('Enter a category name')
+    if (safe.includes(v)) return toast.error('Category already exists')
+    onChange([v, ...safe])
+    setNewCat('')
+    toast.success('Category added')
+  }
+
+  const startEdit = (cat) => { setEditing(cat); setEditVal(cat) }
+  const cancelEdit = () => { setEditing(null); setEditVal('') }
+  const saveEdit = () => {
+    const v = editVal.trim()
+    if (!v) return toast.error('Name cannot be empty')
+    if (v === editing) return cancelEdit()
+    if (safe.includes(v)) return toast.error('Category already exists')
+    onChange(safe.map(c => c === editing ? v : c))
+    toast.success('Category renamed')
+    cancelEdit()
+  }
+  const removeCat = (cat) => {
+    const inUse = usedBy.filter(x => x.category === cat).length
+    if (inUse > 0 && !confirm(`"${cat}" is used by ${inUse} entr${inUse===1?'y':'ies'}. Delete anyway? (entries keep the old category name)`)) return
+    onChange(safe.filter(c => c !== cat))
+    toast.success('Category deleted')
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o)=>{ setOpen(o); if(!o){ cancelEdit(); setNewCat('') } }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm"><Tag className="h-4 w-4 mr-2"/>Manage Categories</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Input value={newCat} onChange={e=>setNewCat(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCat() } }} placeholder="Add new category..." autoFocus/>
+            <Button onClick={addCat}><Plus className="h-4 w-4"/></Button>
+          </div>
+          <div className="max-h-[20rem] overflow-y-auto pr-2 space-y-1.5">
+            {safe.map(cat => {
+              const useCount = usedBy.filter(x => x.category === cat).length
+              return (
+                <div key={cat} className="flex items-center justify-between rounded-lg border p-2 gap-2">
+                  {editing === cat ? (
+                    <>
+                      <Input value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') saveEdit(); if(e.key==='Escape') cancelEdit() }} autoFocus className="h-8"/>
+                      <div className="flex gap-1 shrink-0">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit}><Check className="h-4 w-4 text-emerald-500"/></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit}><XIcon className="h-4 w-4 text-muted-foreground"/></Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0"/>
+                        <span className="font-medium truncate">{cat}</span>
+                        {useCount > 0 && <Badge variant="outline" className="text-xs shrink-0">{useCount} entr{useCount===1?'y':'ies'}</Badge>}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>startEdit(cat)}><Pencil className="h-3 w-3 text-sky-500"/></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>removeCat(cat)}><Trash2 className="h-3 w-3 text-rose-500"/></Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+            {safe.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No categories yet. Add one above.</p>}
+          </div>
+          <p className="text-xs text-muted-foreground italic">Renaming a category does NOT update existing entries automatically. Deleting a category in use leaves existing entries unchanged.</p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------- PAYOFF SIMULATOR ----------
+const PayoffSimulator = ({ loan }) => {
+  const [open, setOpen] = useState(false)
+  const lumpSum = payoffToday(loan)
+  const minInterest = minMonthlyInterest(loan)
+  // Suggest a reasonable monthly: 1.5x min-interest or budget if any
+  const suggested = Math.max(Math.ceil(minInterest * 1.5 / 100) * 100, Number(loan.monthlyBudget) || 0, 5000)
+  const [monthly, setMonthly] = useState(String(suggested))
+  useEffect(() => { if (open) setMonthly(String(suggested)) }, [open, suggested])
+
+  const monthlyNum = Number(monthly) || 0
+  const sim = useMemo(() => simulatePayoff(loan, monthlyNum), [loan, monthlyNum])
+  // Comparison: an aggressive (2x) plan
+  const aggressiveMonthly = monthlyNum * 2
+  const aggressive = useMemo(() => simulatePayoff(loan, aggressiveMonthly), [loan, aggressiveMonthly])
+
+  const fmtMonths = (m) => {
+    if (!isFinite(m)) return '∞'
+    const y = Math.floor(m / 12), r = m % 12
+    return y > 0 ? `${y}y ${r}m` : `${r}m`
+  }
+
+  // Chart data: principal trajectory under user's plan
+  const chartData = (sim.schedule || []).filter((_, i) => i % Math.max(1, Math.floor(sim.schedule.length / 50)) === 0 || i === sim.schedule.length - 1)
+    .map(p => ({ month: p.month, principal: Math.max(0, p.principal) }))
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm"><Calculator className="h-4 w-4 mr-2"/>Payoff Simulator</Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Calculator className="h-5 w-5"/>Payoff Simulator — {loan.name}</DialogTitle>
+          <DialogDescription>
+            {loan.lender} • {loan.annualRate}% p.a. reducing balance. Calculate closure or monthly-pace payoff.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* CURRENT STATE */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">Outstanding Principal</p>
+            <p className="font-bold text-rose-500">{fmtINRFull(sim.startingPrincipal)}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">Accrued Interest</p>
+            <p className="font-bold text-amber-500">{fmtINRFull(sim.startingAccrued)}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">Monthly Interest (min)</p>
+            <p className="font-bold">{fmtINRFull(minInterest)}</p>
+          </div>
+        </div>
+
+        {/* OPTION 1: CLOSE TODAY */}
+        <div className="rounded-xl border-2 border-emerald-500/30 bg-emerald-500/5 p-4">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-emerald-500/20 text-emerald-500 p-2.5"><Zap className="h-5 w-5"/></div>
+              <div>
+                <p className="font-semibold">Close it today (full settlement)</p>
+                <p className="text-xs text-muted-foreground">Lump-sum required to pay off the loan immediately</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-emerald-600">{fmtINRFull(lumpSum)}</p>
+              <p className="text-xs text-muted-foreground">Saves {fmtINRFull(sim.totalInterestPaid)} in future interest vs the plan below</p>
+            </div>
+          </div>
+        </div>
+
+        {/* OPTION 2: MONTHLY PLAN */}
+        <div className="rounded-xl border bg-card p-4 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="font-semibold flex items-center gap-2"><Target className="h-4 w-4"/>Monthly payment plan</p>
+              <p className="text-xs text-muted-foreground">Set a fixed monthly contribution to see when the loan closes</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Monthly payment (₹)</Label>
+            <div className="flex items-center gap-3">
+              <Input type="range" min={Math.ceil(minInterest)} max={Math.max(lumpSum, minInterest * 12)} step={500} value={monthlyNum} onChange={e=>setMonthly(e.target.value)} className="flex-1"/>
+              <Input type="number" value={monthly} onChange={e=>setMonthly(e.target.value)} className="w-32"/>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Min interest: {fmtINR(minInterest)}</span>
+              <span>Suggested: {fmtINR(suggested)}</span>
+              <span>Aggressive: {fmtINR(suggested * 2)}</span>
+            </div>
+          </div>
+
+          {sim.neverCloses ? (
+            <div className="rounded-lg bg-rose-500/10 border border-rose-500/40 p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-500 mt-0.5 shrink-0"/>
+              <div className="text-sm">
+                <p className="font-medium text-rose-600">Loan will never close at this pace</p>
+                <p className="text-xs text-muted-foreground">Your payment ({fmtINRFull(monthlyNum)}) is below the monthly interest accrual ({fmtINRFull(minInterest)}). Increase the payment above this threshold to start reducing principal.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-lg bg-muted/40 p-3">
+                  <p className="text-xs text-muted-foreground">Months to close</p>
+                  <p className="font-bold text-lg">{fmtMonths(sim.months)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/40 p-3">
+                  <p className="text-xs text-muted-foreground">Payoff date</p>
+                  <p className="font-bold text-sm">{sim.payoffDate ? sim.payoffDate.toLocaleDateString('en-IN', { year:'numeric', month:'short' }) : '—'}</p>
+                </div>
+                <div className="rounded-lg bg-muted/40 p-3">
+                  <p className="text-xs text-muted-foreground">Total interest paid</p>
+                  <p className="font-bold text-amber-600">{fmtINRFull(sim.totalInterestPaid)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/40 p-3">
+                  <p className="text-xs text-muted-foreground">Total paid (P + I)</p>
+                  <p className="font-bold">{fmtINRFull(sim.totalPaid)}</p>
+                </div>
+              </div>
+
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="payoffGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.4}/>
+                        <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/>
+                    <XAxis dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Months from now', position: 'insideBottom', offset: -5, fontSize: 10 }}/>
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v=>fmtINR(v)}/>
+                    <Tooltip formatter={v=>fmtINRFull(v)} labelFormatter={l=>`Month ${l}`} contentStyle={{ background:'hsl(var(--card))', border:'1px solid hsl(var(--border))', borderRadius: 8 }}/>
+                    <Area type="monotone" dataKey="principal" stroke="#10b981" fill="url(#payoffGrad)" strokeWidth={2} name="Principal"/>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* COMPARISON */}
+              {!aggressive.neverCloses && aggressive.months < sim.months && (
+                <div className="rounded-lg bg-violet-500/10 border border-violet-500/30 p-3">
+                  <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1"><Sparkles className="h-3 w-3"/>Aggressive alternative</p>
+                  <p className="text-sm mt-1">Paying <strong>{fmtINRFull(aggressiveMonthly)}/month</strong> instead would close the loan in <strong>{fmtMonths(aggressive.months)}</strong> (saves <strong>{fmtINRFull(sim.totalInterestPaid - aggressive.totalInterestPaid)}</strong> in interest).</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 // ---------- DASHBOARD ----------
 const Dashboard = ({ go }) => {
@@ -375,8 +620,9 @@ const AccountsPage = () => {
 
 // ---------- INCOME ----------
 const IncomePage = () => {
-  const { state, add, remove, update } = useStore()
-  const [form, setForm] = useState({ source: '', category: 'Salary', amount: '', date: new Date().toISOString().slice(0,10), recurring: 'one-time' })
+  const { state, add, remove, update, setCategories } = useStore()
+  const incomeCats = state.incomeCategories && state.incomeCategories.length > 0 ? state.incomeCategories : ['Salary','Farm','Freelance','Rental','Dividends','Other']
+  const [form, setForm] = useState({ source: '', category: incomeCats[0] || 'Other', amount: '', date: new Date().toISOString().slice(0,10), recurring: 'one-time' })
   const monthAmt = state.incomes.filter(i => new Date(i.date) > new Date(Date.now()-86400000*30)).reduce((s,i)=>s+Number(i.amount),0)
   const yearAmt = state.incomes.filter(i => new Date(i.date) > new Date(Date.now()-86400000*365)).reduce((s,i)=>s+Number(i.amount),0)
   const byCat = useMemo(() => {
@@ -394,7 +640,11 @@ const IncomePage = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Income Streams" subtitle="Salary, farm, side-gigs — all in one ledger" />
+      <PageHeader
+        title="Income Streams"
+        subtitle="Salary, farm, side-gigs — all in one ledger"
+        actions={<CategoryManager title="Manage Income Categories" list={incomeCats} usedBy={state.incomes} onChange={(l)=>setCategories('incomeCategories', l)} />}
+      />
       <SummaryStats items={[
         { icon: TrendingUp, label: 'This Month', value: fmtINR(monthAmt), sub: 'Last 30 days', accent: 'emerald', delta: 8.4 },
         { icon: Calendar, label: 'This Year', value: fmtINR(yearAmt), sub: 'Trailing 12m', accent: 'sky' },
@@ -422,7 +672,7 @@ const IncomePage = () => {
                       item={i}
                       fields={[
                         { key:'source', label:'Source', type:'text' },
-                        { key:'category', label:'Category', type:'select', options:['Salary','Farm','Freelance','Rental','Dividends','Other'] },
+                        { key:'category', label:'Category', type:'select', options: incomeCats },
                         { key:'amount', label:'Amount (₹)', type:'number' },
                         { key:'date', label:'Date', type:'date' },
                         { key:'recurring', label:'Recurrence', type:'select', options:['one-time','monthly','quarterly','yearly'] },
@@ -447,7 +697,7 @@ const IncomePage = () => {
               <Select value={form.category} onValueChange={v=>setForm({...form, category:v})}>
                 <SelectTrigger><SelectValue/></SelectTrigger>
                 <SelectContent>
-                  {['Salary','Farm','Freelance','Rental','Dividends','Other'].map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {incomeCats.map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -548,8 +798,9 @@ const BudgetSettingsDialog = ({ budget, onSave }) => {
 }
 
 const ExpensePage = () => {
-  const { state, add, remove, update, setBudget } = useStore()
-  const [form, setForm] = useState({ label: '', category: 'Household', amount: '', date: new Date().toISOString().slice(0,10) })
+  const { state, add, remove, update, setBudget, setCategories } = useStore()
+  const expenseCats = state.expenseCategories && state.expenseCategories.length > 0 ? state.expenseCategories : ['Household','Farm','Utilities','Lifestyle','Health','Transport','Education','Other']
+  const [form, setForm] = useState({ label: '', category: expenseCats[0] || 'Other', amount: '', date: new Date().toISOString().slice(0,10) })
   const budget = state.budget || { enabled: false, period: 'monthly', amount: 0 }
 
   // Period filter: current calendar month or year
@@ -603,7 +854,12 @@ const ExpensePage = () => {
       <PageHeader
         title="Expense Logs"
         subtitle={`Where every rupee went ${budget.period === 'yearly' ? 'this year' : 'this month'}`}
-        actions={<BudgetSettingsDialog budget={budget} onSave={setBudget} />}
+        actions={
+          <div className="flex gap-2 flex-wrap">
+            <CategoryManager title="Manage Expense Categories" list={expenseCats} usedBy={state.expenses} onChange={(l)=>setCategories('expenseCategories', l)} />
+            <BudgetSettingsDialog budget={budget} onSave={setBudget} />
+          </div>
+        }
       />
       <SummaryStats items={kpis} />
 
@@ -662,7 +918,7 @@ const ExpensePage = () => {
                       item={e}
                       fields={[
                         { key:'label', label:'Label', type:'text' },
-                        { key:'category', label:'Category', type:'select', options:['Household','Farm','Utilities','Lifestyle','Health','Transport','Education','Other'] },
+                        { key:'category', label:'Category', type:'select', options: expenseCats },
                         { key:'amount', label:'Amount (₹)', type:'number' },
                         { key:'date', label:'Date', type:'date' },
                       ]}
@@ -686,7 +942,7 @@ const ExpensePage = () => {
               <Select value={form.category} onValueChange={v=>setForm({...form, category:v})}>
                 <SelectTrigger><SelectValue/></SelectTrigger>
                 <SelectContent>
-                  {['Household','Farm','Utilities','Lifestyle','Health','Transport','Education','Other'].map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {expenseCats.map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -953,7 +1209,8 @@ const LoanCard = ({ loan }) => {
             <h3 className="text-lg font-semibold">{loan.name}</h3>
             <p className="text-xs text-muted-foreground">{loan.lender} • {loan.annualRate}% p.a. • Started {loan.startDate}</p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
+            <PayoffSimulator loan={loan} />
             <EditEntry
               item={loan}
               fields={[

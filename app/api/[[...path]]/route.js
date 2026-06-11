@@ -6,6 +6,9 @@ import { hashPassword, verifyPassword, signToken, getUserFromRequest, ensureDefa
 const json = (data, status = 200) => NextResponse.json(data, { status })
 const err = (msg, status = 400) => NextResponse.json({ error: msg }, { status })
 
+const DEFAULT_INCOME_CATS = ['Salary','Farm','Freelance','Rental','Dividends','Other']
+const DEFAULT_EXPENSE_CATS = ['Household','Farm','Utilities','Lifestyle','Health','Transport','Education','Other']
+
 const defaultUserData = () => ({
   accounts: [],
   incomes: [],
@@ -15,6 +18,8 @@ const defaultUserData = () => ({
   peers: [],
   assets: [],
   budget: { enabled: false, period: 'monthly', amount: 0 },
+  incomeCategories: [...DEFAULT_INCOME_CATS],
+  expenseCategories: [...DEFAULT_EXPENSE_CATS],
 })
 
 const seededUserData = () => {
@@ -165,6 +170,14 @@ async function handler(request, { params }) {
           period: b.period === 'yearly' ? 'yearly' : 'monthly',
           amount: Number(b.amount) || 0,
         }
+        // Custom category lists (strings only, trimmed, deduped, fall back to defaults if empty)
+        const cleanCats = (arr, fallback) => {
+          if (!Array.isArray(arr)) return [...fallback]
+          const out = [...new Set(arr.map(x => String(x || '').trim()).filter(Boolean))]
+          return out.length > 0 ? out : [...fallback]
+        }
+        clean.incomeCategories = cleanCats(data.incomeCategories, DEFAULT_INCOME_CATS)
+        clean.expenseCategories = cleanCats(data.expenseCategories, DEFAULT_EXPENSE_CATS)
         await db.collection('userData').updateOne(
           { userId: targetUserId },
           { $set: { ...clean, userId: targetUserId } },
