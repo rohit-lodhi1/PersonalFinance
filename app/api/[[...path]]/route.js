@@ -14,6 +14,7 @@ const defaultUserData = () => ({
   loans: [],
   peers: [],
   assets: [],
+  budget: { enabled: false, period: 'monthly', amount: 0 },
 })
 
 const seededUserData = () => {
@@ -156,6 +157,13 @@ async function handler(request, { params }) {
         const clean = {}
         for (const k of ['accounts','incomes','expenses','crops','loans','peers','assets']) {
           clean[k] = Array.isArray(data[k]) ? data[k] : []
+        }
+        // Budget object (non-array)
+        const b = data.budget || {}
+        clean.budget = {
+          enabled: !!b.enabled,
+          period: b.period === 'yearly' ? 'yearly' : 'monthly',
+          amount: Number(b.amount) || 0,
         }
         await db.collection('userData').updateOne(
           { userId: targetUserId },

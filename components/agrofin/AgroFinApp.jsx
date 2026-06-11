@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Wallet, TrendingUp, Receipt, Tractor, Landmark,
   HandCoins, Gem, Menu, X, Plus, Trash2, ArrowDownRight, ArrowUpRight,
   Sparkles, Calendar, Target, AlertCircle, CheckCircle2, Sprout,
-  Shield, LogOut, Users, Eye, UserCog, Lock, Loader2, KeyRound, Pencil,
+  Shield, LogOut, Users, Eye, UserCog, Lock, Loader2, KeyRound, Pencil, Settings,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -489,20 +489,99 @@ const IncomePage = () => {
 }
 
 // ---------- EXPENSE ----------
-const BUDGET = 80000
+const BudgetSettingsDialog = ({ budget, onSave }) => {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(budget || { enabled: false, period: 'monthly', amount: 0 })
+  useEffect(() => { if (open) setForm({ ...(budget || { enabled: false, period: 'monthly', amount: 0 }) }) }, [open, budget])
+  const save = () => {
+    onSave({ enabled: !!form.enabled, period: form.period === 'yearly' ? 'yearly' : 'monthly', amount: Number(form.amount) || 0 })
+    setOpen(false)
+    toast.success(form.enabled ? 'Budget enabled & saved' : 'Budget disabled')
+  }
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm"><Settings className="h-4 w-4 mr-2"/>Budget Settings</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Configure your spending budget</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="rounded-lg border p-3 flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Enable Budget Tracking</p>
+              <p className="text-xs text-muted-foreground">Show progress bar & remaining KPI on this page</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setForm(s => ({ ...s, enabled: !s.enabled }))}
+              className={`relative h-6 w-11 rounded-full transition-colors ${form.enabled ? 'bg-emerald-500' : 'bg-muted'}`}>
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${form.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          <div>
+            <Label>Period</Label>
+            <Select value={form.period} onValueChange={v => setForm(s => ({ ...s, period: v }))} disabled={!form.enabled}>
+              <SelectTrigger><SelectValue/></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly">Monthly (resets each calendar month)</SelectItem>
+                <SelectItem value="yearly">Yearly (resets each calendar year)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Budget Amount (₹)</Label>
+            <Input type="number" value={form.amount} onChange={e => setForm(s => ({ ...s, amount: e.target.value }))} placeholder="e.g. 80000" disabled={!form.enabled}/>
+            <p className="text-xs text-muted-foreground mt-1">
+              {form.enabled && form.amount > 0 ? `Roughly ${fmtINR(form.period === 'yearly' ? form.amount / 12 : form.amount)} / month equivalent` : 'Set how much you want to cap your spending at per period.'}
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={save}>Save Budget Settings</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const ExpensePage = () => {
-  const { state, add, remove, update } = useStore()
+  const { state, add, remove, update, setBudget } = useStore()
   const [form, setForm] = useState({ label: '', category: 'Household', amount: '', date: new Date().toISOString().slice(0,10) })
-  const month = state.expenses.filter(e => new Date(e.date) > new Date(Date.now()-86400000*30))
-  const monthAmt = month.reduce((s,e)=>s+Number(e.amount),0)
+  const budget = state.budget || { enabled: false, period: 'monthly', amount: 0 }
+
+  // Period filter: current calendar month or year
+  const now = new Date()
+  const periodStart = budget.period === 'yearly'
+    ? new Date(now.getFullYear(), 0, 1)
+    : new Date(now.getFullYear(), now.getMonth(), 1)
+  const periodLabel = budget.period === 'yearly' ? 'This Year' : 'This Month'
+  const periodSub = budget.period === 'yearly'
+    ? `${now.getFullYear()}`
+    : `${now.toLocaleString('en-IN', { month: 'long' })} ${now.getFullYear()}`
+  const daysInPeriod = budget.period === 'yearly'
+    ? Math.ceil((new Date(now.getFullYear(), 11, 31) - periodStart) / 86400000) + 1
+    : new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const daysElapsed = Math.max(1, Math.ceil((now - periodStart) / 86400000))
+
+  const inPeriod = state.expenses.filter(e => new Date(e.date) >= periodStart)
+  const periodAmt = inPeriod.reduce((s,e)=>s+Number(e.amount),0)
+
   const byCat = useMemo(() => {
     const m = {}
-    month.forEach(e => { m[e.category] = (m[e.category]||0) + Number(e.amount) })
+    inPeriod.forEach(e => { m[e.category] = (m[e.category]||0) + Number(e.amount) })
     return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value)
-  }, [state.expenses])
+  }, [state.expenses, budget.period])
   const topCat = byCat[0]
-  const remaining = BUDGET - monthAmt
-  const pct = Math.min(100, (monthAmt / BUDGET) * 100)
+
+  const budgetEnabled = budget.enabled && Number(budget.amount) > 0
+  const remaining = budgetEnabled ? Number(budget.amount) - periodAmt : 0
+  const pct = budgetEnabled ? Math.min(100, (periodAmt / Number(budget.amount)) * 100) : 0
+  // Pace: where you "should" be at this point in the period if you spent linearly
+  const idealPct = budgetEnabled ? (daysElapsed / daysInPeriod) * 100 : 0
+  const onTrack = budgetEnabled ? periodAmt <= (Number(budget.amount) * daysElapsed / daysInPeriod) : true
 
   const submit = () => {
     if (!form.label || !form.amount) return toast.error('Label and amount required')
@@ -510,20 +589,61 @@ const ExpensePage = () => {
     setForm({ ...form, label: '', amount: '' }); toast.success('Expense logged')
   }
 
+  const kpis = [
+    { icon: Receipt, label: `Spent ${periodLabel}`, value: fmtINR(periodAmt), sub: `${inPeriod.length} txns • ${periodSub}`, accent: 'rose' },
+    { icon: AlertCircle, label: 'Top Category', value: topCat?.name || '—', sub: topCat ? fmtINR(topCat.value) : 'No spend yet', accent: 'amber' },
+    budgetEnabled
+      ? { icon: Target, label: 'Budget Remaining', value: fmtINR(remaining), sub: `${pct.toFixed(0)}% used of ${fmtINR(budget.amount)} (${budget.period})`, accent: remaining < 0 ? 'rose' : (pct > 80 ? 'amber' : 'emerald') }
+      : { icon: Target, label: 'Budget', value: 'Not set', sub: 'Click "Budget Settings" to enable', accent: 'slate' },
+    { icon: TrendingUp, label: 'Avg / Day', value: fmtINR(periodAmt / daysElapsed), sub: `Across ${daysElapsed} day${daysElapsed!==1?'s':''}`, accent: 'sky' },
+  ]
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Expense Logs" subtitle="Where every rupee went this month" />
-      <SummaryStats items={[
-        { icon: Receipt, label: 'Spent This Month', value: fmtINR(monthAmt), sub: `${month.length} transactions`, accent: 'rose' },
-        { icon: AlertCircle, label: 'Top Category', value: topCat?.name || '—', sub: topCat ? fmtINR(topCat.value) : '', accent: 'amber' },
-        { icon: Target, label: 'Budget Remaining', value: fmtINR(remaining), sub: `${pct.toFixed(0)}% used of ${fmtINR(BUDGET)}`, accent: remaining < 0 ? 'rose' : 'emerald' },
-        { icon: TrendingUp, label: 'Avg / Day', value: fmtINR(monthAmt/30), sub: 'Rolling 30-day', accent: 'sky' },
-      ]} />
+      <PageHeader
+        title="Expense Logs"
+        subtitle={`Where every rupee went ${budget.period === 'yearly' ? 'this year' : 'this month'}`}
+        actions={<BudgetSettingsDialog budget={budget} onSave={setBudget} />}
+      />
+      <SummaryStats items={kpis} />
 
-      <div className="rounded-2xl border bg-card p-5">
-        <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium">Monthly Budget Pace</p><p className="text-sm text-muted-foreground">{fmtINR(monthAmt)} / {fmtINR(BUDGET)}</p></div>
-        <Progress value={pct} className="h-3"/>
-      </div>
+      {budgetEnabled ? (
+        <div className="rounded-2xl border bg-card p-5">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <p className="text-sm font-semibold capitalize flex items-center gap-2">
+                {budget.period} Budget Pace
+                <Badge variant={onTrack ? 'secondary' : 'destructive'}>
+                  {onTrack ? 'On track' : 'Over pace'}
+                </Badge>
+              </p>
+              <p className="text-xs text-muted-foreground">Day {daysElapsed} of {daysInPeriod} — ideal pace {idealPct.toFixed(0)}%, actual {pct.toFixed(0)}%</p>
+            </div>
+            <p className="text-sm text-muted-foreground">{fmtINRFull(periodAmt)} / {fmtINRFull(budget.amount)}</p>
+          </div>
+          <div className="relative">
+            <Progress value={pct} className="h-3"/>
+            {/* Ideal pace marker */}
+            <div className="absolute top-0 h-3 w-0.5 bg-foreground/40" style={{ left: `${Math.min(100, idealPct)}%` }} title={`Ideal: ${idealPct.toFixed(0)}%`} />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>0</span>
+            <span className="italic">Vertical line = where you should be today</span>
+            <span>{fmtINRFull(budget.amount)}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed bg-card p-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-amber-500/10 text-amber-500 p-2.5"><Target className="h-5 w-5"/></div>
+            <div>
+              <p className="font-medium">Budget tracking is off</p>
+              <p className="text-sm text-muted-foreground">Enable a monthly or yearly budget to see your spending pace, remaining limit, and over-pace alerts.</p>
+            </div>
+          </div>
+          <BudgetSettingsDialog budget={budget} onSave={setBudget} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
@@ -580,7 +700,7 @@ const ExpensePage = () => {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Spend by Category</CardTitle><CardDescription>Last 30 days</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Spend by Category</CardTitle><CardDescription>{periodSub}</CardDescription></CardHeader>
         <CardContent className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
