@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -84,6 +85,36 @@ const SummaryStats = ({ items }) => (
     {items.map((it, i) => <KpiCard key={i} {...it} />)}
   </div>
 )
+
+// Reusable delete confirmation. Wraps a trigger (button) and shows a confirm dialog.
+const ConfirmDelete = ({ onConfirm, title = 'Delete this item?', description = 'This action cannot be undone.', confirmLabel = 'Delete', triggerSize = 'icon', triggerVariant = 'ghost', triggerClassName = '', children }) => {
+  const [open, setOpen] = useState(false)
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        {children || (
+          <Button variant={triggerVariant} size={triggerSize} className={triggerClassName} onClick={(e) => e.stopPropagation()}>
+            <Trash2 className="h-4 w-4 text-rose-500" />
+          </Button>
+        )}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-rose-500 hover:bg-rose-600 text-white"
+            onClick={() => { onConfirm?.(); setOpen(false) }}>
+            {confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
 
 const PageHeader = ({ title, subtitle, actions }) => (
   <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -263,9 +294,7 @@ const AccountsPage = () => {
                 <h3 className="mt-2 text-lg font-semibold">{a.name}</h3>
                 <p className="text-2xl font-bold mt-1">{fmtINRFull(a.balance)}</p>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => { remove('accounts', a.id); toast('Account removed') }}>
-                <Trash2 className="h-4 w-4 text-rose-500" />
-              </Button>
+              <ConfirmDelete onConfirm={() => { remove('accounts', a.id); toast('Account removed') }} title="Delete this account?" description={`"${a.name}" will be removed. Existing income/expense entries linked won't be deleted, but this wallet will be gone.`} />
             </div>
             <div className="mt-4">
               <Label className="text-xs">Adjust balance</Label>
@@ -323,7 +352,7 @@ const IncomePage = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-emerald-500">+{fmtINRFull(i.amount)}</p>
-                    <Button variant="ghost" size="icon" onClick={() => remove('incomes', i.id)}><Trash2 className="h-4 w-4 text-rose-500"/></Button>
+                    <ConfirmDelete onConfirm={() => remove('incomes', i.id)} title="Delete this income entry?" description={`${i.source} — ${fmtINRFull(i.amount)} will be removed.`} />
                   </div>
                 </div>
               ))}
@@ -431,7 +460,7 @@ const ExpensePage = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-rose-500">−{fmtINRFull(e.amount)}</p>
-                    <Button variant="ghost" size="icon" onClick={() => remove('expenses', e.id)}><Trash2 className="h-4 w-4 text-rose-500"/></Button>
+                    <ConfirmDelete onConfirm={() => remove('expenses', e.id)} title="Delete this expense?" description={`${e.label} — ${fmtINRFull(e.amount)} will be removed.`} />
                   </div>
                 </div>
               ))}
@@ -523,7 +552,7 @@ const FarmPage = () => {
                           {['growing','perennial','harvested','failed'].map(s=><SelectItem key={s} value={s}>{s}</SelectItem>)}
                         </SelectContent>
                       </Select>
-                      <Button variant="ghost" size="icon" onClick={()=>remove('crops', c.id)}><Trash2 className="h-4 w-4 text-rose-500"/></Button>
+                      <ConfirmDelete onConfirm={() => remove('crops', c.id)} title="Delete this crop cycle?" description={`"${c.name}" and its P&L will be removed.`} />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 mt-4">
@@ -587,7 +616,7 @@ const LoanCard = ({ loan }) => {
             <h3 className="text-lg font-semibold">{loan.name}</h3>
             <p className="text-xs text-muted-foreground">{loan.lender} • {loan.annualRate}% p.a. • Started {loan.startDate}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={()=>remove('loans', loan.id)}><Trash2 className="h-4 w-4 text-rose-500"/></Button>
+          <ConfirmDelete onConfirm={() => remove('loans', loan.id)} title={`Delete "${loan.name}"?`} description="The loan, its full payment history, and accrued interest record will be permanently removed." />
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -618,7 +647,9 @@ const LoanCard = ({ loan }) => {
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="font-semibold">{fmtINRFull(t.amount)}</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={()=>removeLoanTx(loan.id, t.id)}><Trash2 className="h-3 w-3 text-rose-500"/></Button>
+                    <ConfirmDelete onConfirm={() => removeLoanTx(loan.id, t.id)} title="Delete this payment?" description={`The ${t.type} entry of ${fmtINRFull(t.amount)} on ${t.date} will be reversed. Interest will recalculate from the remaining history.`}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e)=>e.stopPropagation()}><Trash2 className="h-3 w-3 text-rose-500"/></Button>
+                    </ConfirmDelete>
                   </div>
                 </div>
               ))}
@@ -771,7 +802,7 @@ const PeersPage = () => {
                     <Button size="sm" variant={p.settled?'outline':'secondary'} onClick={()=>update('peers', p.id, { settled: !p.settled })}>
                       {p.settled ? 'Reopen' : 'Settle'}
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={()=>remove('peers', p.id)}><Trash2 className="h-4 w-4 text-rose-500"/></Button>
+                    <ConfirmDelete onConfirm={() => remove('peers', p.id)} title="Delete this peer entry?" description={`${p.direction === 'lent' ? 'Lent to' : 'Borrowed from'} ${p.name} — ${fmtINRFull(p.amount)}.`} />
                   </div>
                 </div>
               ))}
@@ -848,7 +879,7 @@ const AssetsPage = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{fmtINRFull(a.value)}</p>
-                    <Button variant="ghost" size="icon" onClick={()=>remove('assets', a.id)}><Trash2 className="h-4 w-4 text-rose-500"/></Button>
+                    <ConfirmDelete onConfirm={() => remove('assets', a.id)} title="Delete this asset?" description={`${a.name} — ${fmtINRFull(a.value)} will be removed from your portfolio.`} />
                   </div>
                 </div>
               ))}
@@ -1030,10 +1061,15 @@ const AdminPage = () => {
                       <DialogFooter><Button onClick={async()=>{ if(!newPw) return toast.error('Enter new password'); await patchUser(u.id, { password: newPw }); setPwOpen(null); setNewPw(''); toast.success('Password reset')}}>Reset</Button></DialogFooter>
                     </DialogContent>
                   </Dialog>
-                  <Button size="sm" variant="ghost" disabled={u.id === me?.id}
-                    onClick={() => { if(confirm(`Delete user @${u.username} and all their data?`)) deleteUser(u.id).then(()=>toast('User deleted')) }}>
-                    <Trash2 className="h-4 w-4 text-rose-500"/>
-                  </Button>
+                  <ConfirmDelete
+                    onConfirm={() => deleteUser(u.id).then(() => toast('User deleted')).catch(e => toast.error(e.message))}
+                    title={`Delete user @${u.username}?`}
+                    description={`This will permanently delete the account "${u.displayName || u.username}" AND all their financial data (accounts, incomes, expenses, loans, etc.). This cannot be undone.`}
+                    confirmLabel="Delete User & All Data">
+                    <Button size="sm" variant="ghost" disabled={u.id === me?.id} onClick={(e)=>e.stopPropagation()}>
+                      <Trash2 className="h-4 w-4 text-rose-500"/>
+                    </Button>
+                  </ConfirmDelete>
                 </div>
               </div>
             ))}
