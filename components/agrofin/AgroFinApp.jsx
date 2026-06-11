@@ -597,81 +597,195 @@ const ExpensePage = () => {
 }
 
 // ---------- FARM ----------
+// Helper: sum of inputs[] (new itemised investments) with fallback to legacy single field
+const cropInvestmentTotal = (c) => {
+  if (Array.isArray(c.inputs) && c.inputs.length > 0) return c.inputs.reduce((s, x) => s + Number(x.amount || 0), 0)
+  return Number(c.investments || 0)
+}
+
+const CropCard = ({ crop: c }) => {
+  const { update, remove, addCropInvestment, updateCropInvestment, removeCropInvestment } = useStore()
+  const [open, setOpen] = useState(false)
+  const [invForm, setInvForm] = useState({ label: '', category: 'Seeds', amount: '', date: new Date().toISOString().slice(0, 10) })
+  const totalInv = cropInvestmentTotal(c)
+  const cProfit = Number(c.expectedRevenue) - totalInv
+  const cMargin = c.expectedRevenue > 0 ? (cProfit / Number(c.expectedRevenue)) * 100 : 0
+  const inputs = c.inputs || []
+
+  const byCat = useMemo(() => {
+    const m = {}
+    inputs.forEach(i => { m[i.category] = (m[i.category] || 0) + Number(i.amount) })
+    return Object.entries(m).map(([name, value]) => ({ name, value }))
+  }, [inputs])
+
+  const submitInv = () => {
+    if (!invForm.label || !invForm.amount) return toast.error('Label and amount required')
+    addCropInvestment(c.id, { ...invForm, amount: Number(invForm.amount) })
+    setInvForm({ ...invForm, label: '', amount: '' })
+    setOpen(false)
+    toast.success('Investment added')
+  }
+
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-lg">{c.name}</h3>
+              <Badge variant="outline" className="capitalize">{c.status}</Badge>
+              {inputs.length > 0 && <Badge variant="secondary">{inputs.length} input{inputs.length !== 1 ? 's' : ''}</Badge>}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{c.area} acres • Sowed {c.sowDate} • Harvest {c.expectedHarvest || 'TBD'}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Select value={c.status} onValueChange={v => update('crops', c.id, { status: v })}>
+              <SelectTrigger className="h-8 w-32"><SelectValue/></SelectTrigger>
+              <SelectContent>{['growing','perennial','harvested','failed'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+            <EditEntry
+              item={c}
+              fields={[
+                { key: 'name', label: 'Crop name', type: 'text' },
+                { key: 'area', label: 'Area (acres)', type: 'number' },
+                { key: 'sowDate', label: 'Sowed', type: 'date' },
+                { key: 'expectedHarvest', label: 'Expected Harvest', type: 'date' },
+                { key: 'expectedRevenue', label: 'Expected Revenue (₹)', type: 'number' },
+                { key: 'status', label: 'Status', type: 'select', options: ['growing','perennial','harvested','failed'] },
+              ]}
+              onSave={(patch) => update('crops', c.id, patch)}
+              title={`Edit ${c.name}`}
+            />
+            <ConfirmDelete onConfirm={() => remove('crops', c.id)} title="Delete this crop cycle?" description={`"${c.name}" and all its investment entries will be removed.`} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mt-4">
+          <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Invested</p><p className="font-semibold">{fmtINRFull(totalInv)}</p></div>
+          <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Expected Rev</p><p className="font-semibold text-emerald-500">{fmtINRFull(c.expectedRevenue)}</p></div>
+          <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Margin</p><p className={`font-semibold ${cProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{cMargin.toFixed(1)}%</p></div>
+        </div>
+
+        <div className="mt-4 rounded-xl border bg-muted/20 p-4">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <p className="text-sm font-semibold flex items-center gap-2"><Sprout className="h-4 w-4 text-emerald-500"/>Investment Ledger</p>
+              <p className="text-xs text-muted-foreground">Track every input cost — seeds, fertilizer, labor, equipment, etc.</p>
+            </div>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild><Button size="sm"><Plus className="h-3 w-3 mr-1"/>Add Investment</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Add investment — {c.name}</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <div><Label>What was it?</Label><Input value={invForm.label} onChange={e=>setInvForm({...invForm, label:e.target.value})} placeholder="Hybrid paddy seeds, Urea, Tractor rental..."/></div>
+                  <div><Label>Category</Label>
+                    <Select value={invForm.category} onValueChange={v=>setInvForm({...invForm, category:v})}>
+                      <SelectTrigger><SelectValue/></SelectTrigger>
+                      <SelectContent>{['Seeds','Fertilizer','Pesticide','Labor','Equipment','Irrigation','Fuel','Land lease','Transport','Other'].map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label>Amount (₹)</Label><Input type="number" value={invForm.amount} onChange={e=>setInvForm({...invForm, amount:e.target.value})}/></div>
+                    <div><Label>Date</Label><Input type="date" value={invForm.date} onChange={e=>setInvForm({...invForm, date:e.target.value})}/></div>
+                  </div>
+                </div>
+                <DialogFooter><Button onClick={submitInv}>Add Investment</Button></DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {inputs.length > 0 ? (
+            <div className="space-y-1.5">
+              {inputs.map(inv => (
+                <div key={inv.id} className="flex items-center justify-between rounded-lg border bg-card p-2.5 text-sm gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant="outline" className="capitalize shrink-0">{inv.category}</Badge>
+                    <span className="font-medium truncate">{inv.label}</span>
+                    <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">{inv.date}</span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="font-semibold text-amber-600">{fmtINRFull(inv.amount)}</span>
+                    <EditEntry
+                      item={inv}
+                      fields={[
+                        { key:'label', label:'Label', type:'text' },
+                        { key:'category', label:'Category', type:'select', options:['Seeds','Fertilizer','Pesticide','Labor','Equipment','Irrigation','Fuel','Land lease','Transport','Other'] },
+                        { key:'amount', label:'Amount (₹)', type:'number' },
+                        { key:'date', label:'Date', type:'date' },
+                      ]}
+                      onSave={(patch) => updateCropInvestment(c.id, inv.id, patch)}
+                      title="Edit investment"
+                      trigger={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e)=>e.stopPropagation()}><Pencil className="h-3 w-3 text-sky-500"/></Button>}
+                    />
+                    <ConfirmDelete
+                      onConfirm={() => removeCropInvestment(c.id, inv.id)}
+                      title="Delete this investment?"
+                      description={`${inv.label} — ${fmtINRFull(inv.amount)} will be removed and the crop total will recalculate.`}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e)=>e.stopPropagation()}><Trash2 className="h-3 w-3 text-rose-500"/></Button>
+                    </ConfirmDelete>
+                  </div>
+                </div>
+              ))}
+              {byCat.length > 1 && (
+                <div className="mt-3 pt-3 border-t flex flex-wrap gap-2">
+                  {byCat.map(b => (
+                    <div key={b.name} className="rounded-md bg-background px-2 py-1 text-xs border">
+                      <span className="text-muted-foreground">{b.name}: </span>
+                      <span className="font-semibold">{fmtINRFull(b.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-xs text-muted-foreground">
+              {Number(c.investments) > 0 ? (
+                <>Legacy bundled total: <strong>{fmtINRFull(c.investments)}</strong>. Click "Add Investment" to start itemising.</>
+              ) : (
+                <>No investments logged yet. Click "Add Investment" above to track your first input cost.</>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 const FarmPage = () => {
-  const { state, add, remove, update } = useStore()
-  const [form, setForm] = useState({ name: '', area: '', sowDate: new Date().toISOString().slice(0,10), expectedHarvest: '', investments: '', expectedRevenue: '', status: 'growing' })
-  const totalInv = state.crops.reduce((s,c)=>s+Number(c.investments),0)
-  const totalRev = state.crops.reduce((s,c)=>s+Number(c.expectedRevenue),0)
+  const { state, add } = useStore()
+  const [form, setForm] = useState({ name: '', area: '', sowDate: new Date().toISOString().slice(0,10), expectedHarvest: '', expectedRevenue: '', status: 'growing' })
+  const totalInv = state.crops.reduce((s, c) => s + cropInvestmentTotal(c), 0)
+  const totalRev = state.crops.reduce((s, c) => s + Number(c.expectedRevenue), 0)
   const profit = totalRev - totalInv
-  const margin = totalRev > 0 ? (profit/totalRev)*100 : 0
+  const margin = totalRev > 0 ? (profit / totalRev) * 100 : 0
+  const totalInputs = state.crops.reduce((s, c) => s + ((c.inputs || []).length), 0)
 
   const submit = () => {
-    if (!form.name || !form.investments) return toast.error('Crop name and investment required')
-    add('crops', { ...form, area: Number(form.area), investments: Number(form.investments), expectedRevenue: Number(form.expectedRevenue) })
-    setForm({ ...form, name: '', area: '', investments: '', expectedRevenue: '', expectedHarvest: '' }); toast.success('Crop cycle added')
+    if (!form.name) return toast.error('Crop name required')
+    add('crops', { ...form, area: Number(form.area), investments: 0, expectedRevenue: Number(form.expectedRevenue), inputs: [] })
+    setForm({ ...form, name: '', area: '', expectedRevenue: '', expectedHarvest: '' })
+    toast.success('Crop cycle added — now log its investments')
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Farming Profitability" subtitle="Crop cycle P&L, season by season" />
+      <PageHeader title="Farming Profitability" subtitle="Crop cycle P&L with itemised investment tracking" />
       <SummaryStats items={[
-        { icon: Tractor, label: 'Total Invested', value: fmtINR(totalInv), sub: `${state.crops.length} crop cycles`, accent: 'amber' },
+        { icon: Tractor, label: 'Total Invested', value: fmtINR(totalInv), sub: `${totalInputs} investment entries`, accent: 'amber' },
         { icon: Sprout, label: 'Projected Revenue', value: fmtINR(totalRev), sub: 'On expected harvest', accent: 'emerald' },
-        { icon: TrendingUp, label: 'Projected Profit', value: fmtINR(profit), sub: `${margin.toFixed(1)}% margin`, accent: profit>=0?'emerald':'rose' },
-        { icon: CheckCircle2, label: 'Active Cycles', value: state.crops.filter(c=>c.status!=='harvested').length, sub: 'In field right now', accent: 'sky' },
+        { icon: TrendingUp, label: 'Projected Profit', value: fmtINR(profit), sub: `${margin.toFixed(1)}% margin`, accent: profit >= 0 ? 'emerald' : 'rose' },
+        { icon: CheckCircle2, label: 'Active Cycles', value: state.crops.filter(c => c.status !== 'harvested').length, sub: `${state.crops.length} total`, accent: 'sky' },
       ]} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-3">
-          {state.crops.map(c => {
-            const cProfit = Number(c.expectedRevenue) - Number(c.investments)
-            const cMargin = c.expectedRevenue > 0 ? (cProfit/Number(c.expectedRevenue))*100 : 0
-            return (
-              <Card key={c.id}>
-                <CardContent className="pt-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2"><h3 className="font-semibold text-lg">{c.name}</h3><Badge variant="outline" className="capitalize">{c.status}</Badge></div>
-                      <p className="text-xs text-muted-foreground mt-1">{c.area} acres • Sowed {c.sowDate} • Harvest {c.expectedHarvest || 'TBD'}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Select value={c.status} onValueChange={v=>update('crops', c.id, { status: v })}>
-                        <SelectTrigger className="h-8 w-32"><SelectValue/></SelectTrigger>
-                        <SelectContent>
-                          {['growing','perennial','harvested','failed'].map(s=><SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <EditEntry
-                        item={c}
-                        fields={[
-                          { key:'name', label:'Crop name', type:'text' },
-                          { key:'area', label:'Area (acres)', type:'number' },
-                          { key:'sowDate', label:'Sowed', type:'date' },
-                          { key:'expectedHarvest', label:'Expected Harvest', type:'date' },
-                          { key:'investments', label:'Investments (₹)', type:'number' },
-                          { key:'expectedRevenue', label:'Expected Revenue (₹)', type:'number' },
-                          { key:'status', label:'Status', type:'select', options:['growing','perennial','harvested','failed'] },
-                        ]}
-                        onSave={(patch) => update('crops', c.id, patch)}
-                        title={`Edit ${c.name}`}
-                      />
-                      <ConfirmDelete onConfirm={() => remove('crops', c.id)} title="Delete this crop cycle?" description={`"${c.name}" and its P&L will be removed.`} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 mt-4">
-                    <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Invested</p><p className="font-semibold">{fmtINRFull(c.investments)}</p></div>
-                    <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Expected Rev</p><p className="font-semibold text-emerald-500">{fmtINRFull(c.expectedRevenue)}</p></div>
-                    <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Margin</p><p className={`font-semibold ${cProfit>=0?'text-emerald-500':'text-rose-500'}`}>{cMargin.toFixed(1)}%</p></div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+          {state.crops.map(c => <CropCard key={c.id} crop={c} />)}
           {state.crops.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No crops yet — add your first cycle →</p>}
         </div>
 
-        <Card>
-          <CardHeader><CardTitle>Add Crop Cycle</CardTitle></CardHeader>
+        <Card className="h-fit">
+          <CardHeader><CardTitle>Add Crop Cycle</CardTitle><CardDescription>Create the cycle first, then log investments individually</CardDescription></CardHeader>
           <CardContent className="space-y-3">
             <div><Label>Crop name</Label><Input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} placeholder="Paddy — Rabi 2025"/></div>
             <div className="grid grid-cols-2 gap-2">
@@ -687,9 +801,9 @@ const FarmPage = () => {
               <div><Label>Sowed</Label><Input type="date" value={form.sowDate} onChange={e=>setForm({...form, sowDate:e.target.value})}/></div>
               <div><Label>Harvest</Label><Input type="date" value={form.expectedHarvest} onChange={e=>setForm({...form, expectedHarvest:e.target.value})}/></div>
             </div>
-            <div><Label>Investments (₹)</Label><Input type="number" value={form.investments} onChange={e=>setForm({...form, investments:e.target.value})}/></div>
             <div><Label>Expected Revenue (₹)</Label><Input type="number" value={form.expectedRevenue} onChange={e=>setForm({...form, expectedRevenue:e.target.value})}/></div>
             <Button className="w-full" onClick={submit}><Plus className="h-4 w-4 mr-2"/>Add Cycle</Button>
+            <p className="text-xs text-muted-foreground italic">Tip: After creating the cycle, click "Add Investment" on its card to log seeds, fertilizer, labor, etc. individually.</p>
           </CardContent>
         </Card>
       </div>
