@@ -3,11 +3,14 @@
 @tailwind utilities;
 
 /* Premium thin scrollbar for in-list scroll containers */
-.overflow-y-auto::-webkit-scrollbar { width: 6px; }
+.overflow-y-auto::-webkit-scrollbar { width: 8px; }
 .overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
-.overflow-y-auto::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.25); border-radius: 9999px; }
-.overflow-y-auto::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.45); }
-.overflow-y-auto { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent; }
+.overflow-y-auto::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.3); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
+.overflow-y-auto::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.55); border: 2px solid transparent; background-clip: padding-box; }
+.overflow-y-auto { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent; }
+
+/* Smooth scroll inside modals and large lists */
+.agro-smooth-scroll { scroll-behavior: smooth; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 
 
 body {

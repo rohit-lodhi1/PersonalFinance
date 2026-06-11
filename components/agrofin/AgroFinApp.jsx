@@ -144,7 +144,7 @@ const EditEntry = ({ item, fields, onSave, title = 'Edit', trigger, size = 'icon
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-3 max-h-[60vh] overflow-auto pr-1">
           {fields.map(f => (
@@ -226,7 +226,7 @@ const CategoryManager = ({ title, list, onChange, usedBy = [] }) => {
       <DialogTrigger asChild>
         <Button variant="outline" size="sm"><Tag className="h-4 w-4 mr-2"/>Manage Categories</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -235,7 +235,7 @@ const CategoryManager = ({ title, list, onChange, usedBy = [] }) => {
             <Input value={newCat} onChange={e=>setNewCat(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCat() } }} placeholder="Add new category..." autoFocus/>
             <Button onClick={addCat}><Plus className="h-4 w-4"/></Button>
           </div>
-          <div className="max-h-[20rem] overflow-y-auto pr-2 space-y-1.5">
+          <div className="max-h-[20rem] overflow-y-auto pr-2 space-y-1.5 agro-smooth-scroll">
             {safe.map(cat => {
               const useCount = usedBy.filter(x => x.category === cat).length
               return (
@@ -304,7 +304,7 @@ const PayoffSimulator = ({ loan }) => {
       <DialogTrigger asChild>
         <Button variant="outline" size="sm"><Calculator className="h-4 w-4 mr-2"/>Payoff Simulator</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto agro-smooth-scroll">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Calculator className="h-5 w-5"/>Payoff Simulator — {loan.name}</DialogTitle>
           <DialogDescription>
@@ -560,7 +560,7 @@ const AccountsPage = () => {
       <PageHeader title="Accounts & Wallets" subtitle="Track every wallet, bank, and cash box"
         actions={<Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Account</Button></DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
             <DialogHeader><DialogTitle>New Account</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Axis Savings" /></div>
@@ -753,7 +753,7 @@ const BudgetSettingsDialog = ({ budget, onSave }) => {
       <DialogTrigger asChild>
         <Button variant="outline" size="sm"><Settings className="h-4 w-4 mr-2"/>Budget Settings</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
         <DialogHeader>
           <DialogTitle>Configure your spending budget</DialogTitle>
         </DialogHeader>
@@ -1050,7 +1050,7 @@ const CropCard = ({ crop: c }) => {
             </div>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus className="h-3 w-3 mr-1"/>Add Investment</Button></DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
                 <DialogHeader><DialogTitle>Add investment — {c.name}</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                   <div><Label>What was it?</Label><Input value={invForm.label} onChange={e=>setInvForm({...invForm, label:e.target.value})} placeholder="Hybrid paddy seeds, Urea, Tractor rental..."/></div>
@@ -1291,7 +1291,7 @@ const LoanCard = ({ loan }) => {
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button className="w-full"><Plus className="h-4 w-4 mr-2"/>Record Payment / Top-up</Button></DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
             <DialogHeader><DialogTitle>Record transaction — {loan.name}</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><Label>Type</Label>
@@ -1344,7 +1344,7 @@ const LoansPage = () => {
       <PageHeader title="Loans — Reducing Balance" subtitle="Day-accurate interest accrual. Pay principal any time, in any amount."
         actions={<Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2"/>New Loan</Button></DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
             <DialogHeader><DialogTitle>New Loan</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><Label>Loan name</Label><Input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} placeholder="Land purchase"/></div>
@@ -1637,7 +1637,7 @@ const AdminPage = () => {
       <PageHeader title="User Administration" subtitle="Create, activate, manage roles, and impersonate users"
         actions={<Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2"/>New User</Button></DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
             <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><Label>Username</Label><Input value={form.username} onChange={e=>setForm({...form, username:e.target.value})} placeholder="e.g. priya"/></div>
@@ -1706,7 +1706,7 @@ const AdminPage = () => {
                   </Button>
                   <Dialog open={pwOpen === u.id} onOpenChange={(o)=>{ setPwOpen(o?u.id:null); setNewPw('') }}>
                     <DialogTrigger asChild><Button size="sm" variant="outline"><Lock className="h-3 w-3 mr-1"/>Reset PW</Button></DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-h-[90vh] overflow-y-auto agro-smooth-scroll">
                       <DialogHeader><DialogTitle>Reset password \u2014 {u.username}</DialogTitle></DialogHeader>
                       <div><Label>New Password</Label><Input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} autoFocus/></div>
                       <DialogFooter><Button onClick={async()=>{ if(!newPw) return toast.error('Enter new password'); await patchUser(u.id, { password: newPw }); setPwOpen(null); setNewPw(''); toast.success('Password reset')}}>Reset</Button></DialogFooter>
