@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Wallet, TrendingUp, Receipt, Tractor, Landmark,
   HandCoins, Gem, Menu, X, Plus, Trash2, ArrowDownRight, ArrowUpRight,
   Sparkles, Calendar, Target, AlertCircle, CheckCircle2, Sprout,
+  Shield, LogOut, Users, Eye, UserCog, Lock, Loader2, KeyRound,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -38,6 +39,7 @@ const NAV = [
   { key: 'peers', label: 'Peer Ledger', icon: HandCoins, hint: 'Lend & borrow' },
   { key: 'assets', label: 'Assets & Investments', icon: Gem, hint: 'Net wealth' },
 ]
+const ADMIN_NAV = { key: 'admin', label: 'Admin \u2014 Users', icon: Shield, hint: 'Manage users' }
 
 const CHART_COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4']
 
@@ -890,53 +892,231 @@ const AssetsPage = () => {
 }
 
 // ---------- SHELL ----------
+// ---------- LOGIN SCREEN ----------
+const LoginScreen = () => {
+  const { login, authError } = useStore()
+  const [username, setUsername] = useState('admin')
+  const [password, setPassword] = useState('admin123')
+  const [busy, setBusy] = useState(false)
+  const submit = async (e) => {
+    e?.preventDefault()
+    setBusy(true)
+    try { await login(username, password) } catch {}
+    setBusy(false)
+  }
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-500/10 via-background to-amber-500/10 p-4">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+        className="w-full max-w-md rounded-2xl border bg-card shadow-xl p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-amber-500 h-12 w-12 flex items-center justify-center text-white font-bold shadow-lg text-xl">A</div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">AgroFin</h1>
+            <p className="text-xs text-muted-foreground">Premium Finance × Farm OS</p>
+          </div>
+        </div>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <Label>Username</Label>
+            <Input value={username} onChange={e => setUsername(e.target.value)} placeholder="admin" autoFocus />
+          </div>
+          <div>
+            <Label>Password</Label>
+            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022" />
+          </div>
+          {authError && <div className="rounded-lg bg-rose-500/10 text-rose-500 text-sm p-3 flex items-center gap-2"><AlertCircle className="h-4 w-4"/>{authError}</div>}
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : <KeyRound className="h-4 w-4 mr-2"/>}
+            Sign In
+          </Button>
+        </form>
+        <div className="mt-6 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">Default admin (first run)</p>
+          <p>Username: <code className="bg-background px-1.5 py-0.5 rounded">admin</code></p>
+          <p>Password: <code className="bg-background px-1.5 py-0.5 rounded">admin123</code></p>
+          <p className="italic">Use the Admin panel to create more users.</p>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+// ---------- ADMIN PAGE ----------
+const AdminPage = () => {
+  const { users, me, createUser, patchUser, deleteUser, manageAs, managingUserId } = useStore()
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({ username: '', displayName: '', password: '', role: 'user' })
+  const [pwOpen, setPwOpen] = useState(null) // userId
+  const [newPw, setNewPw] = useState('')
+
+  const submit = async () => {
+    if (!form.username || !form.password) return toast.error('Username and password required')
+    try { await createUser(form); setForm({ username:'', displayName:'', password:'', role:'user' }); setOpen(false); toast.success('User created') }
+    catch (e) { toast.error(e.message) }
+  }
+
+  const activeCount = users.filter(u => u.active).length
+  const adminCount = users.filter(u => u.role === 'admin').length
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="User Administration" subtitle="Create, activate, manage roles, and impersonate users"
+        actions={<Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2"/>New User</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div><Label>Username</Label><Input value={form.username} onChange={e=>setForm({...form, username:e.target.value})} placeholder="e.g. priya"/></div>
+              <div><Label>Display Name</Label><Input value={form.displayName} onChange={e=>setForm({...form, displayName:e.target.value})} placeholder="Priya Sharma"/></div>
+              <div><Label>Password</Label><Input type="password" value={form.password} onChange={e=>setForm({...form, password:e.target.value})}/></div>
+              <div><Label>Role</Label>
+                <Select value={form.role} onValueChange={v=>setForm({...form, role:v})}>
+                  <SelectTrigger><SelectValue/></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter><Button onClick={submit}>Create User</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>}
+      />
+      <SummaryStats items={[
+        { icon: Users, label: 'Total Users', value: users.length, sub: 'All accounts', accent: 'sky' },
+        { icon: CheckCircle2, label: 'Active', value: activeCount, sub: `${users.length - activeCount} inactive`, accent: 'emerald' },
+        { icon: Shield, label: 'Admins', value: adminCount, sub: `${users.length - adminCount} regular`, accent: 'violet' },
+        { icon: UserCog, label: 'You', value: me?.displayName || me?.username, sub: me?.role, accent: 'amber' },
+      ]}/>
+
+      <Card>
+        <CardHeader><CardTitle>All Users</CardTitle><CardDescription>Toggle status, change roles, or manage their finances directly</CardDescription></CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {users.map(u => (
+              <div key={u.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 ${!u.active ? 'opacity-60' : ''} ${managingUserId === u.id ? 'ring-2 ring-emerald-500' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-full h-10 w-10 flex items-center justify-center font-bold text-white ${u.role==='admin'?'bg-gradient-to-br from-violet-500 to-rose-500':'bg-gradient-to-br from-emerald-500 to-sky-500'}`}>
+                    {(u.displayName || u.username).slice(0,2).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-medium flex items-center gap-2">{u.displayName || u.username}
+                      {u.role === 'admin' && <Badge variant="secondary" className="gap-1"><Shield className="h-3 w-3"/>Admin</Badge>}
+                      {!u.active && <Badge variant="destructive">Inactive</Badge>}
+                      {u.id === me?.id && <Badge variant="outline">You</Badge>}
+                    </p>
+                    <p className="text-xs text-muted-foreground">@{u.username} · since {u.createdAt?.slice(0,10)}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={u.id === me?.id}
+                    onClick={() => manageAs(managingUserId === u.id ? null : u.id)}>
+                    <Eye className="h-3 w-3 mr-1"/>{managingUserId === u.id ? 'Stop Managing' : 'Manage As'}
+                  </Button>
+                  <Select value={u.role} onValueChange={v => patchUser(u.id, { role: v }).then(()=>toast.success('Role updated'))} disabled={u.id === me?.id}>
+                    <SelectTrigger className="h-8 w-24"><SelectValue/></SelectTrigger>
+                    <SelectContent><SelectItem value="user">User</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent>
+                  </Select>
+                  <Button size="sm" variant={u.active?'secondary':'default'} disabled={u.id === me?.id}
+                    onClick={() => patchUser(u.id, { active: !u.active }).then(()=>toast(u.active?'Deactivated':'Activated'))}>
+                    {u.active ? 'Deactivate' : 'Activate'}
+                  </Button>
+                  <Dialog open={pwOpen === u.id} onOpenChange={(o)=>{ setPwOpen(o?u.id:null); setNewPw('') }}>
+                    <DialogTrigger asChild><Button size="sm" variant="outline"><Lock className="h-3 w-3 mr-1"/>Reset PW</Button></DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle>Reset password \u2014 {u.username}</DialogTitle></DialogHeader>
+                      <div><Label>New Password</Label><Input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} autoFocus/></div>
+                      <DialogFooter><Button onClick={async()=>{ if(!newPw) return toast.error('Enter new password'); await patchUser(u.id, { password: newPw }); setPwOpen(null); setNewPw(''); toast.success('Password reset')}}>Reset</Button></DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                  <Button size="sm" variant="ghost" disabled={u.id === me?.id}
+                    onClick={() => { if(confirm(`Delete user @${u.username} and all their data?`)) deleteUser(u.id).then(()=>toast('User deleted')) }}>
+                    <Trash2 className="h-4 w-4 text-rose-500"/>
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {users.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No users yet</p>}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 const Sidebar = ({ active, setActive, mobileOpen, setMobileOpen }) => {
+  const { me, logout } = useStore()
+  const nav = me?.role === 'admin' ? [...NAV, ADMIN_NAV] : NAV
   return (
     <>
       {mobileOpen && <div className="lg:hidden fixed inset-0 bg-black/40 z-40" onClick={()=>setMobileOpen(false)}/>}
       <aside className={`fixed lg:sticky top-0 left-0 h-screen w-72 bg-sidebar text-sidebar-foreground border-r z-50 transform transition-transform lg:translate-x-0 ${mobileOpen?'translate-x-0':'-translate-x-full'} flex flex-col`}>
         <div className="p-5 flex items-center gap-3 border-b">
           <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-amber-500 h-10 w-10 flex items-center justify-center text-white font-bold shadow-lg">A</div>
-          <div>
+          <div className="min-w-0">
             <h2 className="font-bold tracking-tight">AgroFin</h2>
-            <p className="text-xs text-muted-foreground">Finance × Farm OS</p>
+            <p className="text-xs text-muted-foreground truncate">Finance × Farm OS</p>
           </div>
           <Button variant="ghost" size="icon" className="ml-auto lg:hidden" onClick={()=>setMobileOpen(false)}><X className="h-4 w-4"/></Button>
         </div>
         <ScrollArea className="flex-1 p-3">
           <nav className="space-y-1">
-            {NAV.map(n => {
+            {nav.map(n => {
               const Active = active === n.key
               return (
                 <button key={n.key} onClick={()=>{ setActive(n.key); setMobileOpen(false) }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all
                   ${Active ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow' : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
                   <n.icon className="h-4 w-4 shrink-0"/>
-                  <div className="text-left flex-1">
+                  <div className="text-left flex-1 min-w-0">
                     <div className="font-medium">{n.label}</div>
-                    <div className={`text-xs ${Active?'text-sidebar-primary-foreground/70':'text-muted-foreground'}`}>{n.hint}</div>
+                    <div className={`text-xs truncate ${Active?'text-sidebar-primary-foreground/70':'text-muted-foreground'}`}>{n.hint}</div>
                   </div>
                 </button>
               )
             })}
           </nav>
         </ScrollArea>
-        <div className="p-3 border-t">
-          <ResetButton/>
+        <div className="p-3 border-t space-y-2">
+          <div className="rounded-lg bg-muted/50 p-2.5 flex items-center gap-2">
+            <div className={`rounded-full h-8 w-8 flex items-center justify-center font-bold text-white text-xs shrink-0 ${me?.role==='admin'?'bg-gradient-to-br from-violet-500 to-rose-500':'bg-gradient-to-br from-emerald-500 to-sky-500'}`}>
+              {(me?.displayName || me?.username || '?').slice(0,2).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">{me?.displayName || me?.username}</p>
+              <p className="text-xs text-muted-foreground capitalize">{me?.role}</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" className="w-full" onClick={logout}><LogOut className="h-3 w-3 mr-2"/>Sign Out</Button>
         </div>
       </aside>
     </>
   )
 }
 
-const ResetButton = () => {
-  const { reset } = useStore()
-  return <Button variant="outline" size="sm" className="w-full" onClick={()=>{ if(confirm('Reset all data to defaults?')) { reset(); toast('Data reset') } }}>Reset Demo Data</Button>
+const ManagingBanner = () => {
+  const { managingUser, manageAs } = useStore()
+  if (!managingUser) return null
+  return (
+    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+      className="bg-gradient-to-r from-violet-500 to-emerald-500 text-white text-sm px-4 lg:px-8 py-2 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Eye className="h-4 w-4"/>
+        <span>You are managing <strong>{managingUser.displayName || managingUser.username}</strong>'s data as an admin. All changes save to their account.</span>
+      </div>
+      <Button size="sm" variant="secondary" onClick={() => manageAs(null)}>Stop Managing</Button>
+    </motion.div>
+  )
 }
 
 const Shell = () => {
+  const { me, loading, managingUser } = useStore()
   const [active, setActive] = useState('dashboard')
   const [mobileOpen, setMobileOpen] = useState(false)
+  if (!me) return <LoginScreen/>
+  const nav = me.role === 'admin' ? [...NAV, ADMIN_NAV] : NAV
+  const currentNav = nav.find(n => n.key === active) || NAV[0]
   const Page = {
     dashboard: <Dashboard go={setActive}/>,
     accounts: <AccountsPage/>,
@@ -946,21 +1126,28 @@ const Shell = () => {
     loans: <LoansPage/>,
     peers: <PeersPage/>,
     assets: <AssetsPage/>,
+    admin: <AdminPage/>,
   }[active]
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <Sidebar active={active} setActive={setActive} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen}/>
       <main className="flex-1 min-w-0">
+        <ManagingBanner/>
         <header className="sticky top-0 z-30 backdrop-blur bg-background/80 border-b px-4 lg:px-8 h-14 flex items-center gap-3">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={()=>setMobileOpen(true)}><Menu className="h-5 w-5"/></Button>
-          <p className="text-sm text-muted-foreground">{NAV.find(n=>n.key===active)?.hint}</p>
+          <p className="text-sm text-muted-foreground">{currentNav.hint}</p>
           <div className="ml-auto flex items-center gap-2">
-            <Badge variant="outline" className="gap-1"><Sparkles className="h-3 w-3 text-emerald-500"/>Live</Badge>
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground"/>}
+            {managingUser ? (
+              <Badge variant="default" className="gap-1 bg-gradient-to-r from-violet-500 to-emerald-500"><Eye className="h-3 w-3"/>Managing {managingUser.username}</Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1"><Sparkles className="h-3 w-3 text-emerald-500"/>Live</Badge>
+            )}
           </div>
         </header>
         <div className="p-4 lg:p-8 max-w-7xl mx-auto">
           <AnimatePresence mode="wait">
-            <motion.div key={active} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+            <motion.div key={active + (managingUser?.id || '')} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
               {Page}
             </motion.div>
           </AnimatePresence>

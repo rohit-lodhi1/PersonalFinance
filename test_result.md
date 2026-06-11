@@ -101,3 +101,109 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  AgroFin: multi-user personal finance + farm OS. Each user must have their own isolated
+  financial data (accounts, incomes, expenses, crops, loans, peers, assets). Admin role can
+  create/activate/deactivate users, change roles, reset passwords, and "Manage As" any user
+  to edit their data. Data must be persisted in MongoDB and survive reload/logout.
+
+backend:
+  - task: "Auth: default admin auto-seed + login + token verification"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js, /app/lib/agrofin/auth.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "On first request /api ensures a default admin (username 'admin', password 'admin123'). POST /api/auth/login returns HMAC-signed token. GET /api/auth/me validates token. Inactive users cannot log in."
+
+  - task: "Per-user data isolation (GET/PUT /api/data?userId=...)"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Each user has a single document in 'userData' collection keyed by userId. GET returns own data; admins can pass ?userId= to fetch any user's data. PUT replaces 7 arrays (accounts, incomes, expenses, crops, loans, peers, assets). Non-admins cannot fetch/modify another user's data (must return 403). Data must persist across logout/login."
+
+  - task: "Admin user CRUD: list, create, patch (active/role/password), delete"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/users creates new user with seeded data document. PATCH /api/users/:id supports {active, role, displayName, password}. DELETE /api/users/:id removes user and their userData. Non-admin must get 403. Admin cannot delete self."
+
+frontend:
+  - task: "Login screen + auth gate + per-user data loading"
+    implemented: true
+    working: "NA"
+    file: "/app/components/agrofin/AgroFinApp.jsx, /app/lib/agrofin/store.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Unauthenticated users see LoginScreen. After login, data loads for me.id. Logout clears token + local state. Admin can 'Manage As' another user; state then loads/saves for that userId."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.1"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Auth: default admin auto-seed + login + token verification"
+    - "Per-user data isolation (GET/PUT /api/data?userId=...)"
+    - "Admin user CRUD: list, create, patch (active/role/password), delete"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Please verify the AgroFin multi-user backend. Critical scenarios:
+      1) Auth flow:
+         a) GET /api/auth/me without token → 401.
+         b) POST /api/auth/login with admin/admin123 → returns token + user.
+         c) GET /api/auth/me with bearer token → returns user.
+         d) Login with wrong password or inactive user → 401.
+      2) Per-user data isolation:
+         a) As admin, POST /api/users to create user 'priya' (password 'pass1234'); confirm
+            she gets a seeded userData document.
+         b) Login as priya; GET /api/data → her seeded data.
+         c) PUT /api/data with modified data; GET /api/data again → changes persisted.
+         d) Create a second user 'rohan'; login as rohan; his data must be totally
+            independent (his own seed/empty, NOT priya's).
+         e) As priya, try GET /api/data?userId=<rohan.id> → expect 403 forbidden.
+         f) As admin, GET /api/data?userId=<priya.id> → returns priya's data (admin allowed).
+         g) Logout priya, login again → data still intact (persistence check).
+      3) Admin user management:
+         a) As non-admin, GET /api/users → 403.
+         b) As admin, PATCH /api/users/<priya.id> {active:false}; then login as priya → 401.
+         c) Reactivate; reset password via PATCH {password:'newpw'}; login with new password.
+         d) Change role to 'admin' via PATCH; verify GET /api/users now allowed for priya.
+         e) DELETE /api/users/<rohan.id> as admin; userData for rohan must also be removed
+            (subsequent GET /api/data?userId=<rohan.id> as admin should auto-create empty doc).
+         f) Admin DELETE on self → 400.
+      4) Data integrity:
+         a) PUT /api/data with malformed payload (non-array fields) → request stored only
+            the 7 known array fields; extra fields ignored.
+         b) Multiple rapid PUTs simulate the debounced save; last-write wins, no data loss
+            between users.
+      Base URL: use NEXT_PUBLIC_BASE_URL from /app/.env (https://hybrid-harvest-2.preview.emergentagent.com)
+      and prefix all calls with /api. Auth tokens go in 'Authorization: Bearer <token>' header.
