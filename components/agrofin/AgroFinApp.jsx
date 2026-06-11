@@ -1,11 +1,11 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Wallet, TrendingUp, Receipt, Tractor, Landmark,
   HandCoins, Gem, Menu, X, Plus, Trash2, ArrowDownRight, ArrowUpRight,
   Sparkles, Calendar, Target, AlertCircle, CheckCircle2, Sprout,
-  Shield, LogOut, Users, Eye, UserCog, Lock, Loader2, KeyRound,
+  Shield, LogOut, Users, Eye, UserCog, Lock, Loader2, KeyRound, Pencil,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -113,6 +113,64 @@ const ConfirmDelete = ({ onConfirm, title = 'Delete this item?', description = '
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+// Generic edit dialog. `fields` is an array of { key, label, type, options?, placeholder? }
+// type: 'text' | 'number' | 'date' | 'select' | 'textarea'
+// onSave receives a patch object with coerced values.
+const EditEntry = ({ item, fields, onSave, title = 'Edit', trigger, size = 'icon' }) => {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({})
+  useEffect(() => { if (open) setForm({ ...item }) }, [open, item])
+  const save = () => {
+    const patch = {}
+    for (const f of fields) {
+      let v = form[f.key]
+      if (f.type === 'number') v = v === '' || v === null || v === undefined ? 0 : Number(v)
+      patch[f.key] = v
+    }
+    onSave?.(patch)
+    setOpen(false)
+    toast.success('Saved')
+  }
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger || (
+          <Button variant="ghost" size={size} onClick={(e)=>e.stopPropagation()}>
+            <Pencil className="h-4 w-4 text-sky-500" />
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <div className="space-y-3 max-h-[60vh] overflow-auto pr-1">
+          {fields.map(f => (
+            <div key={f.key}>
+              <Label>{f.label}</Label>
+              {f.type === 'select' ? (
+                <Select value={String(form[f.key] ?? '')} onValueChange={v => setForm(s => ({ ...s, [f.key]: v }))}>
+                  <SelectTrigger><SelectValue/></SelectTrigger>
+                  <SelectContent>
+                    {(f.options || []).map(opt => {
+                      const val = typeof opt === 'object' ? opt.value : opt
+                      const label = typeof opt === 'object' ? opt.label : opt
+                      return <SelectItem key={val} value={val}>{label}</SelectItem>
+                    })}
+                  </SelectContent>
+                </Select>
+              ) : f.type === 'textarea' ? (
+                <Textarea value={form[f.key] ?? ''} onChange={e => setForm(s => ({ ...s, [f.key]: e.target.value }))} placeholder={f.placeholder}/>
+              ) : (
+                <Input type={f.type || 'text'} step={f.step} value={form[f.key] ?? ''} onChange={e => setForm(s => ({ ...s, [f.key]: e.target.value }))} placeholder={f.placeholder}/>
+              )}
+            </div>
+          ))}
+        </div>
+        <DialogFooter><Button onClick={save}>Save Changes</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -294,11 +352,19 @@ const AccountsPage = () => {
                 <h3 className="mt-2 text-lg font-semibold">{a.name}</h3>
                 <p className="text-2xl font-bold mt-1">{fmtINRFull(a.balance)}</p>
               </div>
-              <ConfirmDelete onConfirm={() => { remove('accounts', a.id); toast('Account removed') }} title="Delete this account?" description={`"${a.name}" will be removed. Existing income/expense entries linked won't be deleted, but this wallet will be gone.`} />
-            </div>
-            <div className="mt-4">
-              <Label className="text-xs">Adjust balance</Label>
-              <Input type="number" defaultValue={a.balance} onBlur={e => update('accounts', a.id, { balance: Number(e.target.value) })} className="mt-1" />
+              <div className="flex items-center gap-1">
+                <EditEntry
+                  item={a}
+                  fields={[
+                    { key: 'name', label: 'Account name', type: 'text' },
+                    { key: 'type', label: 'Type', type: 'select', options: ['bank','cash','wallet'] },
+                    { key: 'balance', label: 'Balance (₹)', type: 'number' },
+                  ]}
+                  onSave={(patch) => update('accounts', a.id, patch)}
+                  title={`Edit ${a.name}`}
+                />
+                <ConfirmDelete onConfirm={() => { remove('accounts', a.id); toast('Account removed') }} title="Delete this account?" description={`"${a.name}" will be removed. Existing income/expense entries linked won't be deleted, but this wallet will be gone.`} />
+              </div>
             </div>
           </motion.div>
         ))}
@@ -309,7 +375,7 @@ const AccountsPage = () => {
 
 // ---------- INCOME ----------
 const IncomePage = () => {
-  const { state, add, remove } = useStore()
+  const { state, add, remove, update } = useStore()
   const [form, setForm] = useState({ source: '', category: 'Salary', amount: '', date: new Date().toISOString().slice(0,10), recurring: 'one-time' })
   const monthAmt = state.incomes.filter(i => new Date(i.date) > new Date(Date.now()-86400000*30)).reduce((s,i)=>s+Number(i.amount),0)
   const yearAmt = state.incomes.filter(i => new Date(i.date) > new Date(Date.now()-86400000*365)).reduce((s,i)=>s+Number(i.amount),0)
@@ -352,6 +418,18 @@ const IncomePage = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-emerald-500">+{fmtINRFull(i.amount)}</p>
+                    <EditEntry
+                      item={i}
+                      fields={[
+                        { key:'source', label:'Source', type:'text' },
+                        { key:'category', label:'Category', type:'select', options:['Salary','Farm','Freelance','Rental','Dividends','Other'] },
+                        { key:'amount', label:'Amount (₹)', type:'number' },
+                        { key:'date', label:'Date', type:'date' },
+                        { key:'recurring', label:'Recurrence', type:'select', options:['one-time','monthly','quarterly','yearly'] },
+                      ]}
+                      onSave={(patch) => update('incomes', i.id, patch)}
+                      title={`Edit income — ${i.source}`}
+                    />
                     <ConfirmDelete onConfirm={() => remove('incomes', i.id)} title="Delete this income entry?" description={`${i.source} — ${fmtINRFull(i.amount)} will be removed.`} />
                   </div>
                 </div>
@@ -413,7 +491,7 @@ const IncomePage = () => {
 // ---------- EXPENSE ----------
 const BUDGET = 80000
 const ExpensePage = () => {
-  const { state, add, remove } = useStore()
+  const { state, add, remove, update } = useStore()
   const [form, setForm] = useState({ label: '', category: 'Household', amount: '', date: new Date().toISOString().slice(0,10) })
   const month = state.expenses.filter(e => new Date(e.date) > new Date(Date.now()-86400000*30))
   const monthAmt = month.reduce((s,e)=>s+Number(e.amount),0)
@@ -460,6 +538,17 @@ const ExpensePage = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-rose-500">−{fmtINRFull(e.amount)}</p>
+                    <EditEntry
+                      item={e}
+                      fields={[
+                        { key:'label', label:'Label', type:'text' },
+                        { key:'category', label:'Category', type:'select', options:['Household','Farm','Utilities','Lifestyle','Health','Transport','Education','Other'] },
+                        { key:'amount', label:'Amount (₹)', type:'number' },
+                        { key:'date', label:'Date', type:'date' },
+                      ]}
+                      onSave={(patch) => update('expenses', e.id, patch)}
+                      title={`Edit expense — ${e.label}`}
+                    />
                     <ConfirmDelete onConfirm={() => remove('expenses', e.id)} title="Delete this expense?" description={`${e.label} — ${fmtINRFull(e.amount)} will be removed.`} />
                   </div>
                 </div>
@@ -552,6 +641,20 @@ const FarmPage = () => {
                           {['growing','perennial','harvested','failed'].map(s=><SelectItem key={s} value={s}>{s}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      <EditEntry
+                        item={c}
+                        fields={[
+                          { key:'name', label:'Crop name', type:'text' },
+                          { key:'area', label:'Area (acres)', type:'number' },
+                          { key:'sowDate', label:'Sowed', type:'date' },
+                          { key:'expectedHarvest', label:'Expected Harvest', type:'date' },
+                          { key:'investments', label:'Investments (₹)', type:'number' },
+                          { key:'expectedRevenue', label:'Expected Revenue (₹)', type:'number' },
+                          { key:'status', label:'Status', type:'select', options:['growing','perennial','harvested','failed'] },
+                        ]}
+                        onSave={(patch) => update('crops', c.id, patch)}
+                        title={`Edit ${c.name}`}
+                      />
                       <ConfirmDelete onConfirm={() => remove('crops', c.id)} title="Delete this crop cycle?" description={`"${c.name}" and its P&L will be removed.`} />
                     </div>
                   </div>
@@ -596,7 +699,7 @@ const FarmPage = () => {
 
 // ---------- LOANS (the heart) ----------
 const LoanCard = ({ loan }) => {
-  const { addLoanTx, remove, removeLoanTx } = useStore()
+  const { addLoanTx, remove, removeLoanTx, updateLoanTx, update } = useStore()
   const [open, setOpen] = useState(false)
   const [tx, setTx] = useState({ type: 'principal', amount: '', date: new Date().toISOString().slice(0,10), note: '' })
   const s = computeLoanState(loan)
@@ -616,7 +719,21 @@ const LoanCard = ({ loan }) => {
             <h3 className="text-lg font-semibold">{loan.name}</h3>
             <p className="text-xs text-muted-foreground">{loan.lender} • {loan.annualRate}% p.a. • Started {loan.startDate}</p>
           </div>
-          <ConfirmDelete onConfirm={() => remove('loans', loan.id)} title={`Delete "${loan.name}"?`} description="The loan, its full payment history, and accrued interest record will be permanently removed." />
+          <div className="flex items-center gap-1">
+            <EditEntry
+              item={loan}
+              fields={[
+                { key:'name', label:'Loan name', type:'text' },
+                { key:'lender', label:'Lender', type:'text' },
+                { key:'principal', label:'Initial Principal (₹)', type:'number' },
+                { key:'annualRate', label:'Annual Rate (%)', type:'number' },
+                { key:'startDate', label:'Start Date', type:'date' },
+              ]}
+              onSave={(patch) => update('loans', loan.id, patch)}
+              title={`Edit ${loan.name}`}
+            />
+            <ConfirmDelete onConfirm={() => remove('loans', loan.id)} title={`Delete "${loan.name}"?`} description="The loan, its full payment history, and accrued interest record will be permanently removed." />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -647,6 +764,18 @@ const LoanCard = ({ loan }) => {
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="font-semibold">{fmtINRFull(t.amount)}</span>
+                    <EditEntry
+                      item={t}
+                      fields={[
+                        { key:'type', label:'Type', type:'select', options:[{value:'principal',label:'Principal repayment'},{value:'interest',label:'Interest payment'},{value:'disbursement',label:'Top-up / disbursement'}] },
+                        { key:'amount', label:'Amount (₹)', type:'number' },
+                        { key:'date', label:'Date', type:'date' },
+                        { key:'note', label:'Note', type:'textarea' },
+                      ]}
+                      onSave={(patch) => updateLoanTx(loan.id, t.id, patch)}
+                      title="Edit loan transaction"
+                      trigger={<Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e)=>e.stopPropagation()}><Pencil className="h-3 w-3 text-sky-500"/></Button>}
+                    />
                     <ConfirmDelete onConfirm={() => removeLoanTx(loan.id, t.id)} title="Delete this payment?" description={`The ${t.type} entry of ${fmtINRFull(t.amount)} on ${t.date} will be reversed. Interest will recalculate from the remaining history.`}>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e)=>e.stopPropagation()}><Trash2 className="h-3 w-3 text-rose-500"/></Button>
                     </ConfirmDelete>
@@ -704,7 +833,7 @@ const LoanCard = ({ loan }) => {
 }
 
 const LoansPage = () => {
-  const { state, add } = useStore()
+  const { state, add, update } = useStore()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ name: '', lender: '', principal: '', annualRate: '', startDate: new Date().toISOString().slice(0,10) })
   const allStates = state.loans.map(l => ({ loan: l, ...computeLoanState(l) }))
@@ -802,6 +931,18 @@ const PeersPage = () => {
                     <Button size="sm" variant={p.settled?'outline':'secondary'} onClick={()=>update('peers', p.id, { settled: !p.settled })}>
                       {p.settled ? 'Reopen' : 'Settle'}
                     </Button>
+                    <EditEntry
+                      item={p}
+                      fields={[
+                        { key:'name', label:'Name', type:'text' },
+                        { key:'direction', label:'Direction', type:'select', options:[{value:'lent',label:'Lent (they owe me)'},{value:'borrowed',label:'Borrowed (I owe)'}] },
+                        { key:'amount', label:'Amount (₹)', type:'number' },
+                        { key:'date', label:'Date', type:'date' },
+                        { key:'note', label:'Note', type:'textarea' },
+                      ]}
+                      onSave={(patch) => update('peers', p.id, patch)}
+                      title={`Edit entry — ${p.name}`}
+                    />
                     <ConfirmDelete onConfirm={() => remove('peers', p.id)} title="Delete this peer entry?" description={`${p.direction === 'lent' ? 'Lent to' : 'Borrowed from'} ${p.name} — ${fmtINRFull(p.amount)}.`} />
                   </div>
                 </div>
@@ -839,7 +980,7 @@ const PeersPage = () => {
 
 // ---------- ASSETS ----------
 const AssetsPage = () => {
-  const { state, add, remove } = useStore()
+  const { state, add, remove, update } = useStore()
   const [form, setForm] = useState({ name: '', category: 'Equity', value: '', growth: '' })
   const total = state.assets.reduce((s,a)=>s+Number(a.value),0)
   const byCat = useMemo(() => {
@@ -879,6 +1020,17 @@ const AssetsPage = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{fmtINRFull(a.value)}</p>
+                    <EditEntry
+                      item={a}
+                      fields={[
+                        { key:'name', label:'Asset name', type:'text' },
+                        { key:'category', label:'Category', type:'select', options:['Equity','Debt','Gold','Land','Real Estate','Retirement','Crypto','Other'] },
+                        { key:'value', label:'Current Value (₹)', type:'number' },
+                        { key:'growth', label:'Annual Growth (%)', type:'number' },
+                      ]}
+                      onSave={(patch) => update('assets', a.id, patch)}
+                      title={`Edit ${a.name}`}
+                    />
                     <ConfirmDelete onConfirm={() => remove('assets', a.id)} title="Delete this asset?" description={`${a.name} — ${fmtINRFull(a.value)} will be removed from your portfolio.`} />
                   </div>
                 </div>
@@ -1041,6 +1193,14 @@ const AdminPage = () => {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <EditEntry
+                    item={u}
+                    fields={[
+                      { key:'displayName', label:'Display Name', type:'text' },
+                    ]}
+                    onSave={(patch) => patchUser(u.id, patch).then(()=>toast.success('Profile updated'))}
+                    title={`Edit ${u.username}`}
+                  />
                   <Button size="sm" variant="outline" disabled={u.id === me?.id}
                     onClick={() => manageAs(managingUserId === u.id ? null : u.id)}>
                     <Eye className="h-3 w-3 mr-1"/>{managingUserId === u.id ? 'Stop Managing' : 'Manage As'}
